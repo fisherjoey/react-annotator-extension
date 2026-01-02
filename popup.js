@@ -20,7 +20,7 @@ const toast = document.getElementById('toast');
 // State
 let currentTabId = null;
 let currentUrl = null;
-let isAnnotating = false;
+let isActive = false;
 let annotations = [];
 
 /**
@@ -77,12 +77,12 @@ function showUnavailableState() {
  */
 async function checkAnnotationMode() {
   try {
-    const response = await browserAPI.tabs.sendMessage(currentTabId, { type: 'GET_ANNOTATION_MODE' });
-    isAnnotating = response?.isAnnotating || false;
+    const response = await browserAPI.tabs.sendMessage(currentTabId, { type: 'GET_SELECTION_MODE' });
+    isActive = response?.isActive || false;
     updateToggleButton();
   } catch (error) {
     // Content script might not be injected yet
-    isAnnotating = false;
+    isActive = false;
     updateToggleButton();
   }
 }
@@ -192,8 +192,8 @@ function escapeHtml(text) {
  * Update toggle button state
  */
 function updateToggleButton() {
-  toggleBtn.classList.toggle('active', isAnnotating);
-  toggleText.textContent = isAnnotating ? 'Stop Annotating' : 'Start Annotating';
+  toggleBtn.classList.toggle('active', isActive);
+  toggleText.textContent = isActive ? 'Stop Annotating' : 'Start Annotating';
 }
 
 /**
@@ -201,11 +201,11 @@ function updateToggleButton() {
  */
 async function toggleAnnotationMode() {
   try {
-    const response = await browserAPI.tabs.sendMessage(currentTabId, { type: 'TOGGLE_ANNOTATION_MODE' });
-    isAnnotating = response?.isAnnotating || false;
+    const response = await browserAPI.tabs.sendMessage(currentTabId, { type: 'TOGGLE_SELECTION_MODE' });
+    isActive = response?.isActive || false;
     updateToggleButton();
 
-    if (isAnnotating) {
+    if (isActive) {
       showToast('Annotation mode enabled', 'success');
     }
   } catch (error) {
