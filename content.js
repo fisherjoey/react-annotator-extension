@@ -198,59 +198,99 @@ function shouldIgnoreElement(element) {
 function getReactComponentName(element) {
   if (!element) return null;
 
-  // Method 1: Check for React DevTools hook and fiber
-  if (window.__REACT_DEVTOOLS_GLOBAL_HOOK__) {
-    const key = Object.keys(element).find(key =>
-      key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$')
-    );
+/**
+ * Find React fiber key on an element
+ * @param {Element} el - DOM element
+ * @returns {string|null} The fiber key or null
+ */
+function findFiberKey(el) {
+  if (!el) return null;
+  return Object.keys(el).find(k =>
+    k.startsWith('__reactFiber$') ||
+    k.startsWith('__reactInternalInstance$') ||
+    k.startsWith('__reactProps$')
+  ) || null;
+}
 
-    if (key) {
-      let fiber = element[key];
+/**
+ * Get component name from fiber
+ * @param {Object} fiber - React fiber
+ * @returns {string|null} Component name or null
+ */
+function nameFromFiber(fiber) {
+  if (!fiber || !fiber.type) return null;
 
-      while (fiber) {
-        // Check for function components
-        if (fiber.type && typeof fiber.type === 'function') {
-          const name = fiber.type.displayName || fiber.type.name;
-          if (name && name !== 'Anonymous') return name;
+  if (typeof fiber.type === 'function') {
+    const name = fiber.type.displayName || fiber.type.name;
+    if (name && name !== 'Anonymous' && !name.startsWith('_')) return name;
+  }
+
+  if (typeof fiber.type === 'object' && fiber.type !== null) {
+    if (fiber.type.displayName) return fiber.type.displayName;
+    if (fiber.type.render) {
+      const n = fiber.type.render.displayName || fiber.type.render.name;
+      if (n && n !== 'Anonymous') return n;
+    }
+    if (fiber.type.type && typeof fiber.type.type === 'function') {
+      const n = fiber.type.type.displayName || fiber.type.type.name;
+      if (n && n !== 'Anonymous') return n;
+    }
+  }
+  return null;
+}
+
+/**
+ * Detect React component name for an element
+ * Uses multiple methods - works WITHOUT React DevTools!
+ * @param {Element} element - DOM element
+ * @returns {string|null} Component name or null
+ */
+function getReactComponentName(element) {
+  if (!element) return null;
+
+  // Method 1: Find React fiber (works without DevTools!)
+  let el = element;
+  for (let i = 0; i < 10 && el; i++) {
+    const fiberKey = findFiberKey(el);
+    if (fiberKey) {
+      let fiber = el[fiberKey];
+      for (let j = 0; j < 20 && fiber; j++) {
+        const name = nameFromFiber(fiber);
+        if (name) {
+          console.log('[React Annotator] Found component:', name);
+          return name;
         }
-
-        // Check for forwardRef, memo, etc.
-        if (fiber.type && typeof fiber.type === 'object' && fiber.type.$$typeof) {
-          const innerType = fiber.type.type || fiber.type.render;
-          if (innerType) {
-            const name = innerType.displayName || innerType.name;
-            if (name && name !== 'Anonymous') return name;
-          }
-        }
-
         fiber = fiber.return;
       }
     }
+    el = el.parentElement;
   }
 
-  // Method 2: Check common data attributes
-  const dataAttributes = [
-    'data-component',
-    'data-testid',
-    'data-cy',
-    'data-test',
-    'data-reactid'
-  ];
-
-  for (const attr of dataAttributes) {
-    const value = element.getAttribute(attr);
-    if (value) return value;
+  // Method 2: Check data attributes on element and parents
+  el = element;
+  for (let i = 0; i < 5 && el; i++) {
+    const attrs = ['data-component', 'data-testid', 'data-cy', 'data-test'];
+    for (const attr of attrs) {
+      const val = el.getAttribute(attr);
+      if (val) {
+        console.log('[React Annotator] Found via data attr:', val);
+        return val;
+      }
+    }
+    el = el.parentElement;
   }
 
-  // Method 3: Check class names for component-like patterns
-  const componentClass = Array.from(element.classList).find(c =>
-    /^[A-Z][a-zA-Z]+/.test(c) && !c.includes('-')
-  );
-  if (componentClass) return componentClass;
+  // Method 3: PascalCase class names
+  const cls = Array.from(element.classList).find(c => /^[A-Z][a-zA-Z0-9]+$/.test(c));
+  if (cls) {
+    console.log('[React Annotator] Found via class:', cls);
+    return cls;
+  }
 
-  // Method 4: Return null, user will input manually
+  console.log('[React Annotator] No component found for:', element.tagName);
   return null;
 }
+
 
 // ============================================================================
 // Highlight Functions
