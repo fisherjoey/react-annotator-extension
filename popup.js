@@ -3,6 +3,10 @@
  * Handles all popup UI logic and communication with background/content scripts
  */
 
+// Browser API compatibility (Firefox uses 'browser', Chrome uses 'chrome')
+const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+
+
 // DOM Elements
 const toggleBtn = document.getElementById('toggle-btn');
 const toggleText = document.getElementById('toggle-text');
@@ -25,7 +29,7 @@ let annotations = [];
 async function init() {
   try {
     // Get current tab
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
     currentTabId = tab.id;
     currentUrl = tab.url;
 
@@ -73,7 +77,7 @@ function showUnavailableState() {
  */
 async function checkAnnotationMode() {
   try {
-    const response = await chrome.tabs.sendMessage(currentTabId, { type: 'GET_ANNOTATION_MODE' });
+    const response = await browserAPI.tabs.sendMessage(currentTabId, { type: 'GET_ANNOTATION_MODE' });
     isAnnotating = response?.isAnnotating || false;
     updateToggleButton();
   } catch (error) {
@@ -88,7 +92,7 @@ async function checkAnnotationMode() {
  */
 async function loadAnnotations() {
   try {
-    const response = await chrome.runtime.sendMessage({
+    const response = await browserAPI.runtime.sendMessage({
       type: 'GET_ANNOTATIONS',
       url: currentUrl
     });
@@ -197,7 +201,7 @@ function updateToggleButton() {
  */
 async function toggleAnnotationMode() {
   try {
-    const response = await chrome.tabs.sendMessage(currentTabId, { type: 'TOGGLE_ANNOTATION_MODE' });
+    const response = await browserAPI.tabs.sendMessage(currentTabId, { type: 'TOGGLE_ANNOTATION_MODE' });
     isAnnotating = response?.isAnnotating || false;
     updateToggleButton();
 
@@ -215,7 +219,7 @@ async function toggleAnnotationMode() {
  */
 async function scrollToAnnotation(annotation) {
   try {
-    await chrome.tabs.sendMessage(currentTabId, {
+    await browserAPI.tabs.sendMessage(currentTabId, {
       type: 'SCROLL_TO_ANNOTATION',
       annotation
     });
@@ -235,7 +239,7 @@ async function deleteAnnotation(index) {
     const annotationId = annotations[index]?.id;
     if (!annotationId) return;
 
-    await chrome.runtime.sendMessage({
+    await browserAPI.runtime.sendMessage({
       type: 'DELETE_ANNOTATION',
       id: annotationId,
       url: currentUrl
@@ -302,7 +306,7 @@ function formatAnnotationsForClaude(url, annotations) {
  */
 async function exportAllPages() {
   try {
-    const response = await chrome.runtime.sendMessage({ type: 'GET_ALL_ANNOTATIONS' });
+    const response = await browserAPI.runtime.sendMessage({ type: 'GET_ALL_ANNOTATIONS' });
     const allAnnotations = response?.annotations || {};
 
     const urls = Object.keys(allAnnotations);
@@ -354,7 +358,7 @@ copyClaudeBtn.addEventListener('click', copyForClaude);
 exportAllBtn.addEventListener('click', exportAllPages);
 
 // Listen for annotation updates from background
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'ANNOTATIONS_UPDATED' && message.url === currentUrl) {
     loadAnnotations();
   }

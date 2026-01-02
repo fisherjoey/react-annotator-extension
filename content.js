@@ -6,6 +6,9 @@
  * and persistent comment icons.
  */
 
+// Browser API compatibility
+const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+
 // ============================================================================
 // State Management
 // ============================================================================
@@ -576,7 +579,7 @@ async function captureElementScreenshot(element) {
   try {
     const rect = element.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    const response = await chrome.runtime.sendMessage({ type: 'CAPTURE_SCREENSHOT' });
+    const response = await browserAPI.runtime.sendMessage({ type: 'CAPTURE_SCREENSHOT' });
     if (!response?.success) return null;
 
     const img = new Image();
@@ -783,7 +786,7 @@ function toggleSelectionMode() {
   }
 
   // Notify popup of state change
-  chrome.runtime.sendMessage({
+  browserAPI.runtime.sendMessage({
     type: 'SELECTION_MODE_CHANGED',
     isActive: state.isSelectionMode,
   });
@@ -876,7 +879,7 @@ function handleKeyDown(event) {
 function saveAnnotationsToStorage() {
   const annotationsArray = Array.from(state.annotations.values());
 
-  chrome.runtime.sendMessage({
+  browserAPI.runtime.sendMessage({
     type: 'SAVE_ANNOTATIONS',
     url: window.location.href,
     annotations: annotationsArray,
@@ -887,7 +890,7 @@ function saveAnnotationsToStorage() {
  * Load annotations from extension storage
  */
 function loadAnnotationsFromStorage() {
-  chrome.runtime.sendMessage({
+  browserAPI.runtime.sendMessage({
     type: 'LOAD_ANNOTATIONS',
     url: window.location.href,
   }, (response) => {
@@ -911,7 +914,7 @@ function loadAnnotationsFromStorage() {
 /**
  * Handle messages from popup or background script
  */
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
     case 'TOGGLE_SELECTION_MODE':
       toggleSelectionMode();
