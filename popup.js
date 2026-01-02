@@ -317,37 +317,105 @@ function formatAnnotationsForClaude(url, annotations) {
 }
 
 /**
- * Export annotations from all pages
+ * Export annotations with screenshots as downloadable files
  */
 async function exportAllPages() {
+  if (annotations.length === 0) {
+    showToast('No annotations to export', 'error');
+    return;
+  }
+
   try {
-    const response = await browserAPI.runtime.sendMessage({ type: 'GET_ALL_ANNOTATIONS' });
-    const allAnnotations = response?.annotations || {};
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const pageName = new URL(currentUrl).pathname.replace(/\//g, '-').slice(1) || 'home';
+    const folderName = `annotations-${pageName}-${timestamp}`;
 
-    const urls = Object.keys(allAnnotations);
-    if (urls.length === 0) {
-      showToast('No annotations to export', 'error');
-      return;
-    }
-
-    let markdown = `# React Annotator Export\n\n`;
+    // Generate markdown with image references
+    let markdown = `## UI Annotations for ${currentUrl}\n\n`;
     markdown += `*Exported on ${new Date().toLocaleString()}*\n\n`;
-    markdown += `---\n\n`;
 
-    urls.forEach(url => {
-      const pageAnnotations = allAnnotations[url];
-      if (pageAnnotations && pageAnnotations.length > 0) {
-        markdown += formatAnnotationsForClaude(url, pageAnnotations);
-        markdown += `---\n\n`;
+    const downloadPromises = [];
+
+    annotations.forEach((annotation, index) => {
+      const componentName = annotation.reactComponent || annotation.componentName || 'element';
+      const safeComponentName = componentName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+      const imageFilename = `${index + 1}-${safeComponentName}.jpg`;
+
+      markdown += `### ${index + 1}. ${componentName}\n`;
+
+      if (annotation.filePath) {
+        const isSuggested = annotation.pathGuessed ||
+          (annotation.filePath.startsWith('components/') && annotation.filePath.endsWith('.tsx'));
+        if (isSuggested) {
+          markdown += `- **File (suggested):** \`${annotation.filePath}\` ⚠️ *search for "${componentName}" to verify*\n`;
+        } else {
+          markdown += `- **File:** \`${annotation.filePath}\`\n`;
+        }
       }
+
+      if (annotation.elementHTML) {
+        const classMatch = annotation.elementHTML.match(/class="([^"]+)"/);
+        if (classMatch) {
+          markdown += `- **Classes:** \`${classMatch[1]}\`\n`;
+        }
+      }
+
+      markdown += `- **Comment:** ${annotation.comment || 'No comment'}\n`;
+
+      // Add screenshot reference
+      if (annotation.screenshot) {
+        markdown += `- **Screenshot:** ![${componentName}](./${imageFilename})\n`;
+
+        // Queue screenshot download
+        downloadPromises.push(
+          downloadDataUrl(annotation.screenshot, imageFilename)
+        );
+      }
+
+      if (annotation.elementHTML) {
+        markdown += `\n<details>\n<summary>Element HTML</summary>\n\n\`\`\`html\n${annotation.elementHTML}\n\`\`\`\n</details>\n`;
+      }
+
+      markdown += `\n`;
     });
 
-    await navigator.clipboard.writeText(markdown);
-    showToast(`Exported ${urls.length} page(s)!`, 'success');
+    // Download markdown file
+    const mdFilename = `${folderName}.md`;
+    const mdBlob = new Blob([markdown], { type: 'text/markdown' });
+    const mdUrl = URL.createObjectURL(mdBlob);
+
+    const mdLink = document.createElement('a');
+    mdLink.href = mdUrl;
+    mdLink.download = mdFilename;
+    mdLink.click();
+    URL.revokeObjectURL(mdUrl);
+
+    // Download all screenshots
+    await Promise.all(downloadPromises);
+
+    // Copy filepath hint to clipboard
+    const clipboardText = `See downloaded file: ${mdFilename} (with ${downloadPromises.length} screenshots)`;
+    await navigator.clipboard.writeText(clipboardText);
+
+    showToast(`Downloaded ${mdFilename} + ${downloadPromises.length} images! Path copied.`, 'success');
   } catch (error) {
     console.error('Failed to export:', error);
     showToast('Failed to export', 'error');
   }
+}
+
+/**
+ * Download a data URL as a file
+ */
+function downloadDataUrl(dataUrl, filename) {
+  return new Promise((resolve) => {
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    link.click();
+    // Small delay to avoid overwhelming the browser
+    setTimeout(resolve, 100);
+  });
 }
 
 /**
