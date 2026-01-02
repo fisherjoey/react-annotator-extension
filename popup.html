@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>React Annotator</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="header">
+      <img src="icons/icon-48.svg" alt="React Annotator" class="header-icon">
+      <h1 class="header-title">React Annotator</h1>
+    </header>
+
+    <!-- Toggle Button -->
+    <button id="toggle-btn" class="toggle-btn">
+      <span class="toggle-icon">&#9998;</span>
+      <span id="toggle-text">Start Annotating</span>
+    </button>
+
+    <div class="divider"></div>
+
+    <!-- Annotations Section -->
+    <section class="annotations-section">
+      <div class="section-header">
+        <h2 class="section-title">Annotations on this page</h2>
+        <span id="annotation-count" class="count-badge">0</span>
+      </div>
+
+      <div id="annotations-list" class="annotations-list">
+        <div id="empty-state" class="empty-state">
+          <p>No annotations yet.</p>
+          <p class="empty-hint">Click 'Start Annotating' to begin.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- Export Section -->
+    <section class="export-section">
+      <button id="copy-claude-btn" class="export-btn primary">
+        <span class="btn-icon">&#128203;</span>
+        Copy for Claude
+      </button>
+      <button id="export-all-btn" class="export-btn secondary">
+        <span class="btn-icon">&#128194;</span>
+        Export All Pages
+      </button>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>A</kbd> to toggle annotation mode
+    </footer>
+
+    <!-- Toast notification -->
+    <div id="toast" class="toast" aria-live="polite"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

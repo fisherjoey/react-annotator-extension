@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Background circle -->
+  <circle cx="24" cy="24" r="22" fill="#6366f1"/>
+
+  <!-- React atom symbol (simplified) -->
+  <ellipse cx="24" cy="24" rx="10" ry="4" fill="none" stroke="#fff" stroke-width="1.5" transform="rotate(30 24 24)"/>
+  <ellipse cx="24" cy="24" rx="10" ry="4" fill="none" stroke="#fff" stroke-width="1.5" transform="rotate(-30 24 24)"/>
+  <ellipse cx="24" cy="24" rx="10" ry="4" fill="none" stroke="#fff" stroke-width="1.5" transform="rotate(90 24 24)"/>
+  <circle cx="24" cy="24" r="2.5" fill="#fff"/>
+
+  <!-- Comment bubble -->
+  <g transform="translate(28, 8)">
+    <path d="M0 4C0 1.8 1.8 0 4 0h8c2.2 0 4 1.8 4 4v6c0 2.2-1.8 4-4 4h-2l-3 3v-3H4c-2.2 0-4-1.8-4-4V4z" fill="#fbbf24"/>
+    <circle cx="5" cy="7" r="1" fill="#78716c"/>
+    <circle cx="8" cy="7" r="1" fill="#78716c"/>
+    <circle cx="11" cy="7" r="1" fill="#78716c"/>
+  </g>
+</svg>

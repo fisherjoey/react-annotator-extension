@@ -1,0 +1,535 @@
+/**
+ * React Annotator Extension - Content Script Styles
+ *
+ * These styles are injected into web pages to provide UI for the annotation system.
+ * All classes are prefixed with "react-annotator-" to avoid conflicts with page styles.
+ */
+
+/* ==========================================================================
+   CSS Variables (Theming)
+   ========================================================================== */
+
+:root {
+  /* Primary colors */
+  --react-annotator-primary: #2563eb;
+  --react-annotator-primary-hover: #1d4ed8;
+  --react-annotator-primary-light: rgba(37, 99, 235, 0.1);
+
+  /* Accent colors */
+  --react-annotator-accent: #f59e0b;
+  --react-annotator-accent-light: #fbbf24;
+
+  /* Neutral colors */
+  --react-annotator-white: #ffffff;
+  --react-annotator-gray-50: #f9fafb;
+  --react-annotator-gray-100: #f3f4f6;
+  --react-annotator-gray-200: #e5e7eb;
+  --react-annotator-gray-300: #d1d5db;
+  --react-annotator-gray-400: #9ca3af;
+  --react-annotator-gray-500: #6b7280;
+  --react-annotator-gray-600: #4b5563;
+  --react-annotator-gray-700: #374151;
+  --react-annotator-gray-800: #1f2937;
+  --react-annotator-gray-900: #111827;
+
+  /* Semantic colors */
+  --react-annotator-success: #10b981;
+  --react-annotator-error: #ef4444;
+
+  /* Shadows */
+  --react-annotator-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --react-annotator-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --react-annotator-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --react-annotator-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+
+  /* Z-index layers */
+  --react-annotator-z-highlight: 999990;
+  --react-annotator-z-icon: 999995;
+  --react-annotator-z-popup: 999999;
+
+  /* Transitions */
+  --react-annotator-transition-fast: 150ms ease;
+  --react-annotator-transition: 200ms ease;
+  --react-annotator-transition-slow: 300ms ease;
+}
+
+
+/* ==========================================================================
+   Selection Mode Cursor
+   ========================================================================== */
+
+.react-annotator-selection-mode,
+.react-annotator-selection-mode * {
+  cursor: crosshair !important;
+}
+
+
+/* ==========================================================================
+   Element Highlight (Hover in Selection Mode)
+   ========================================================================== */
+
+.react-annotator-highlight {
+  /* Use outline to avoid affecting layout */
+  outline: 2px solid var(--react-annotator-primary) !important;
+  outline-offset: 2px !important;
+
+  /* Semi-transparent overlay using box-shadow */
+  box-shadow:
+    inset 0 0 0 9999px var(--react-annotator-primary-light),
+    0 0 0 4px rgba(37, 99, 235, 0.2) !important;
+
+  /* Smooth transition */
+  transition:
+    outline var(--react-annotator-transition-fast),
+    box-shadow var(--react-annotator-transition-fast) !important;
+
+  /* Ensure visibility */
+  position: relative;
+  z-index: var(--react-annotator-z-highlight);
+}
+
+
+/* ==========================================================================
+   Selected Element
+   ========================================================================== */
+
+.react-annotator-selected {
+  /* Stronger highlight with thicker outline */
+  outline: 3px solid var(--react-annotator-primary) !important;
+  outline-offset: 2px !important;
+
+  /* More prominent overlay */
+  box-shadow:
+    inset 0 0 0 9999px rgba(37, 99, 235, 0.15),
+    0 0 0 6px rgba(37, 99, 235, 0.25),
+    0 0 20px rgba(37, 99, 235, 0.3) !important;
+
+  /* Ensure it's above highlights */
+  position: relative;
+  z-index: calc(var(--react-annotator-z-highlight) + 1);
+}
+
+
+/* ==========================================================================
+   Annotated Element Indicator
+   ========================================================================== */
+
+.react-annotator-has-annotation {
+  /* Subtle persistent indicator */
+  outline: 2px dashed var(--react-annotator-accent) !important;
+  outline-offset: 1px !important;
+
+  /* Very subtle background tint */
+  box-shadow: inset 0 0 0 9999px rgba(245, 158, 11, 0.05) !important;
+
+  /* Smooth transition for hover states */
+  transition:
+    outline var(--react-annotator-transition),
+    box-shadow var(--react-annotator-transition) !important;
+}
+
+.react-annotator-has-annotation:hover {
+  outline-color: var(--react-annotator-accent-light) !important;
+  box-shadow: inset 0 0 0 9999px rgba(245, 158, 11, 0.1) !important;
+}
+
+
+/* ==========================================================================
+   Comment Icon (Floating Indicator)
+   ========================================================================== */
+
+.react-annotator-comment-icon {
+  /* Positioning */
+  position: absolute !important;
+  top: -8px !important;
+  right: -8px !important;
+  z-index: var(--react-annotator-z-icon) !important;
+
+  /* Size and shape */
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 50% !important;
+
+  /* Appearance */
+  background: linear-gradient(135deg, var(--react-annotator-accent-light), var(--react-annotator-accent)) !important;
+  border: 2px solid var(--react-annotator-white) !important;
+  box-shadow: var(--react-annotator-shadow) !important;
+
+  /* Content centering */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  /* Icon/emoji styling */
+  font-size: 12px !important;
+  line-height: 1 !important;
+  color: var(--react-annotator-white) !important;
+
+  /* Interaction */
+  cursor: pointer !important;
+
+  /* Transitions */
+  transition:
+    transform var(--react-annotator-transition),
+    box-shadow var(--react-annotator-transition) !important;
+}
+
+.react-annotator-comment-icon:hover {
+  transform: scale(1.15) !important;
+  box-shadow: var(--react-annotator-shadow-lg) !important;
+}
+
+.react-annotator-comment-icon:active {
+  transform: scale(1.05) !important;
+}
+
+/* Badge for multiple annotations */
+.react-annotator-comment-icon[data-count]::after {
+  content: attr(data-count) !important;
+
+  /* Positioning */
+  position: absolute !important;
+  top: -6px !important;
+  right: -6px !important;
+
+  /* Size */
+  min-width: 16px !important;
+  height: 16px !important;
+  padding: 0 4px !important;
+
+  /* Appearance */
+  background: var(--react-annotator-error) !important;
+  border-radius: 8px !important;
+  border: 1.5px solid var(--react-annotator-white) !important;
+
+  /* Text */
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  color: var(--react-annotator-white) !important;
+  text-align: center !important;
+  line-height: 14px !important;
+
+  /* Layout */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Hide badge when count is 1 or not set */
+.react-annotator-comment-icon[data-count="1"]::after,
+.react-annotator-comment-icon:not([data-count])::after {
+  display: none !important;
+}
+
+
+/* ==========================================================================
+   Annotation Popup
+   ========================================================================== */
+
+.react-annotator-popup {
+  /* Positioning */
+  position: fixed !important;
+  z-index: var(--react-annotator-z-popup) !important;
+
+  /* Size */
+  width: 350px !important;
+  max-width: calc(100vw - 32px) !important;
+
+  /* Appearance */
+  background: var(--react-annotator-white) !important;
+  border-radius: 8px !important;
+  box-shadow: var(--react-annotator-shadow-xl) !important;
+  border: 1px solid var(--react-annotator-gray-200) !important;
+
+  /* Typography reset */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  color: var(--react-annotator-gray-900) !important;
+
+  /* Animation */
+  animation: react-annotator-popup-fade-in var(--react-annotator-transition-slow) ease !important;
+}
+
+@keyframes react-annotator-popup-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Popup Header */
+.react-annotator-popup-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 12px 16px !important;
+  border-bottom: 1px solid var(--react-annotator-gray-200) !important;
+  background: var(--react-annotator-gray-50) !important;
+  border-radius: 8px 8px 0 0 !important;
+}
+
+.react-annotator-popup-title {
+  margin: 0 !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  color: var(--react-annotator-gray-800) !important;
+}
+
+.react-annotator-popup-close {
+  /* Reset button styles */
+  appearance: none !important;
+  border: none !important;
+  background: transparent !important;
+  padding: 4px !important;
+  margin: -4px !important;
+
+  /* Size */
+  width: 28px !important;
+  height: 28px !important;
+
+  /* Appearance */
+  border-radius: 4px !important;
+  color: var(--react-annotator-gray-500) !important;
+  cursor: pointer !important;
+
+  /* Layout */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  /* Transition */
+  transition:
+    background var(--react-annotator-transition-fast),
+    color var(--react-annotator-transition-fast) !important;
+}
+
+.react-annotator-popup-close:hover {
+  background: var(--react-annotator-gray-200) !important;
+  color: var(--react-annotator-gray-700) !important;
+}
+
+.react-annotator-popup-close svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Popup Body */
+.react-annotator-popup-body {
+  padding: 16px !important;
+}
+
+/* Form Fields */
+.react-annotator-form-group {
+  margin-bottom: 14px !important;
+}
+
+.react-annotator-form-group:last-of-type {
+  margin-bottom: 0 !important;
+}
+
+.react-annotator-label {
+  display: block !important;
+  margin-bottom: 6px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: var(--react-annotator-gray-700) !important;
+}
+
+.react-annotator-label-optional {
+  font-weight: 400 !important;
+  color: var(--react-annotator-gray-400) !important;
+  font-style: italic !important;
+}
+
+.react-annotator-input,
+.react-annotator-textarea {
+  /* Reset */
+  appearance: none !important;
+
+  /* Size */
+  width: 100% !important;
+  box-sizing: border-box !important;
+
+  /* Spacing */
+  padding: 10px 12px !important;
+
+  /* Appearance */
+  background: var(--react-annotator-white) !important;
+  border: 1px solid var(--react-annotator-gray-300) !important;
+  border-radius: 6px !important;
+
+  /* Typography */
+  font-family: inherit !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  color: var(--react-annotator-gray-900) !important;
+
+  /* Transition */
+  transition:
+    border-color var(--react-annotator-transition-fast),
+    box-shadow var(--react-annotator-transition-fast) !important;
+}
+
+.react-annotator-input::placeholder,
+.react-annotator-textarea::placeholder {
+  color: var(--react-annotator-gray-400) !important;
+}
+
+.react-annotator-input:hover,
+.react-annotator-textarea:hover {
+  border-color: var(--react-annotator-gray-400) !important;
+}
+
+.react-annotator-input:focus,
+.react-annotator-textarea:focus {
+  outline: none !important;
+  border-color: var(--react-annotator-primary) !important;
+  box-shadow: 0 0 0 3px var(--react-annotator-primary-light) !important;
+}
+
+.react-annotator-textarea {
+  min-height: 80px !important;
+  resize: vertical !important;
+}
+
+/* Popup Footer */
+.react-annotator-popup-footer {
+  display: flex !important;
+  gap: 10px !important;
+  padding: 12px 16px !important;
+  border-top: 1px solid var(--react-annotator-gray-200) !important;
+  background: var(--react-annotator-gray-50) !important;
+  border-radius: 0 0 8px 8px !important;
+}
+
+/* Buttons */
+.react-annotator-btn {
+  /* Reset */
+  appearance: none !important;
+  border: none !important;
+
+  /* Size */
+  padding: 10px 16px !important;
+  flex: 1 !important;
+
+  /* Appearance */
+  border-radius: 6px !important;
+
+  /* Typography */
+  font-family: inherit !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  text-align: center !important;
+
+  /* Interaction */
+  cursor: pointer !important;
+
+  /* Transition */
+  transition:
+    background var(--react-annotator-transition-fast),
+    color var(--react-annotator-transition-fast),
+    box-shadow var(--react-annotator-transition-fast),
+    transform var(--react-annotator-transition-fast) !important;
+}
+
+.react-annotator-btn:active {
+  transform: translateY(1px) !important;
+}
+
+/* Primary Button (Save) */
+.react-annotator-btn-primary {
+  background: var(--react-annotator-primary) !important;
+  color: var(--react-annotator-white) !important;
+}
+
+.react-annotator-btn-primary:hover {
+  background: var(--react-annotator-primary-hover) !important;
+  box-shadow: var(--react-annotator-shadow-sm) !important;
+}
+
+.react-annotator-btn-primary:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--react-annotator-primary-light) !important;
+}
+
+.react-annotator-btn-primary:disabled {
+  background: var(--react-annotator-gray-300) !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+/* Secondary Button (Cancel) */
+.react-annotator-btn-secondary {
+  background: var(--react-annotator-white) !important;
+  color: var(--react-annotator-gray-700) !important;
+  border: 1px solid var(--react-annotator-gray-300) !important;
+}
+
+.react-annotator-btn-secondary:hover {
+  background: var(--react-annotator-gray-50) !important;
+  border-color: var(--react-annotator-gray-400) !important;
+}
+
+.react-annotator-btn-secondary:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--react-annotator-primary-light) !important;
+}
+
+
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+
+/* Screen reader only (for accessibility) */
+.react-annotator-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Prevent text selection during drag operations */
+.react-annotator-no-select {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+
+/* ==========================================================================
+   Dark Mode Support (Optional - follows prefers-color-scheme)
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --react-annotator-white: #1f2937;
+    --react-annotator-gray-50: #111827;
+    --react-annotator-gray-100: #1f2937;
+    --react-annotator-gray-200: #374151;
+    --react-annotator-gray-300: #4b5563;
+    --react-annotator-gray-400: #6b7280;
+    --react-annotator-gray-500: #9ca3af;
+    --react-annotator-gray-600: #d1d5db;
+    --react-annotator-gray-700: #e5e7eb;
+    --react-annotator-gray-800: #f3f4f6;
+    --react-annotator-gray-900: #f9fafb;
+  }
+
+  .react-annotator-popup {
+    border-color: var(--react-annotator-gray-200) !important;
+  }
+
+  .react-annotator-input,
+  .react-annotator-textarea {
+    background: var(--react-annotator-gray-100) !important;
+  }
+}
