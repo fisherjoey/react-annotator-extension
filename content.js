@@ -10,6 +10,205 @@
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 
 // ============================================================================
+// Page Script Injection (to access React fiber in page context)
+// ============================================================================
+
+/**
+ * Inject a script into the page context to access React internals.
+ * Content scripts can't see properties added by page JavaScript.
+ */
+function injectPageScript() {
+  const script = document.createElement('script');
+  script.textContent = [
+    '(function() {',
+    '  function findFiberKey(el) {',
+    '    if (!el) return null;',
+    '    return Object.keys(el).find(function(k) {',
+    '      return k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$");',
+    '    }) || null;',
+    '  }',
+    '  var SKIP_NAMES = ["motion", "Suspense", "Fragment", "Provider", "Consumer", "ForwardRef", "Context", "Portal"];',
+    '  function shouldSkipName(name) {',
+    '    if (!name || name.length < 2) return true;',
+    '    if (name.startsWith("_")) return true;',
+    '    if (name.startsWith("motion.")) return true;',
+    '    for (var i = 0; i < SKIP_NAMES.length; i++) {',
+    '      if (name === SKIP_NAMES[i] || name.startsWith(SKIP_NAMES[i] + ".")) return true;',
+    '    }',
+    '    return false;',
+    '  }',
+    '  function getNameFromFiber(fiber) {',
+    '    if (!fiber) return null;',
+    '    // Check for meaningful key first',
+    '    if (fiber.key && typeof fiber.key === "string" && fiber.key.length > 1 && !fiber.key.startsWith(".")) {',
+    '      return fiber.key;',
+    '    }',
+    '    if (!fiber.type) return null;',
+    '    var name = null;',
+    '    if (typeof fiber.type === "function") {',
+    '      name = fiber.type.displayName || fiber.type.name;',
+    '    } else if (typeof fiber.type === "object" && fiber.type !== null) {',
+    '      name = fiber.type.displayName;',
+    '      if (!name && fiber.type.render) {',
+    '        name = fiber.type.render.displayName || fiber.type.render.name;',
+    '      }',
+    '    }',
+    '    if (shouldSkipName(name)) return null;',
+    '    return name;',
+    '  }',
+    '  function getSourcePath(fiber) {',
+    '    if (!fiber) return null;',
+    '    // Try React DevTools hook first',
+    '    var devToolsSource = getSourceFromDevTools(fiber);',
+    '    if (devToolsSource) return devToolsSource;',
+    '    // Try multiple locations where React stores debug source info',
+    '    if (fiber._debugSource && fiber._debugSource.fileName) {',
+    '      return fiber._debugSource.fileName;',
+    '    }',
+    '    if (fiber.type) {',
+    '      if (fiber.type._source && fiber.type._source.fileName) {',
+    '        return fiber.type._source.fileName;',
+    '      }',
+    '      if (fiber.type.__source && fiber.type.__source.fileName) {',
+    '        return fiber.type.__source.fileName;',
+    '      }',
+    '    }',
+    '    if (fiber.memoizedProps && fiber.memoizedProps.__source) {',
+    '      return fiber.memoizedProps.__source.fileName;',
+    '    }',
+    '    if (fiber.pendingProps && fiber.pendingProps.__source) {',
+    '      return fiber.pendingProps.__source.fileName;',
+    '    }',
+    '    return null;',
+    '  }',
+    '  function getSourceFromDevTools(fiber) {',
+    '    // Try React DevTools hook if available',
+    '    var hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;',
+    '    if (!hook || !hook.renderers) return null;',
+    '    try {',
+    '      // Get the first renderer (usually React DOM)',
+    '      var renderers = Array.from(hook.renderers.values());',
+    '      for (var i = 0; i < renderers.length; i++) {',
+    '        var renderer = renderers[i];',
+    '        if (renderer.findFiberByHostInstance) {',
+    '          // Try to get source from renderer internals',
+    '          var source = renderer.getSourceForFiber ? renderer.getSourceForFiber(fiber) : null;',
+    '          if (source) return source;',
+    '        }',
+    '      }',
+    '    } catch (e) { console.log("[RA] DevTools error:", e); }',
+    '    return null;',
+    '  }',
+    '  function toKebabCase(str) {',
+    '    // Handle spaces, PascalCase, and special chars',
+    '    return str',
+    '      .replace(/([a-z])([A-Z])/g, "$1-$2")',
+    '      .replace(/[\\s_]+/g, "-")',
+    '      .replace(/[^a-zA-Z0-9-]/g, "")',
+    '      .toLowerCase();',
+    '  }',
+    '  function guessPath(componentName) {',
+    '    if (!componentName) return null;',
+    '    var kebab = toKebabCase(componentName);',
+    '    if (!kebab || kebab.length < 2) return null;',
+    '    // Return kebab-case in components folder (common Next.js pattern)',
+    '    return "components/" + kebab + ".tsx";',
+    '  }',
+    '  function getReactComponentAt(x, y) {',
+    '    var el = document.elementFromPoint(x, y);',
+    '    if (!el) return { name: null, path: null };',
+    '    var result = { name: null, path: null };',
+    '    var current = el;',
+    '    for (var i = 0; i < 15 && current; i++) {',
+    '      var fiberKey = findFiberKey(current);',
+    '      if (fiberKey) {',
+    '        var fiber = current[fiberKey];',
+    '        for (var j = 0; j < 30 && fiber; j++) {',
+    '          if (!result.path) {',
+    '            var path = getSourcePath(fiber);',
+    '            if (path) result.path = path;',
+    '          }',
+    '          if (!result.name) {',
+    '            var name = getNameFromFiber(fiber);',
+    '            if (name) result.name = name;',
+    '          }',
+    '          if (result.name && result.path) return result;',
+    '          fiber = fiber.return;',
+    '        }',
+    '      }',
+    '      current = current.parentElement;',
+    '    }',
+    '    // If no path found but we have a name, suggest a path',
+    '    if (result.name && !result.path) {',
+    '      result.path = guessPath(result.name);',
+    '      result.pathGuessed = true;',
+    '    }',
+    '    return result;',
+    '  }',
+    '  window.addEventListener("__RA_GET_COMPONENT__", function() {',
+    '    var dataEl = document.getElementById("__ra_data__");',
+    '    if (!dataEl) return;',
+    '    var x = parseFloat(dataEl.getAttribute("data-x"));',
+    '    var y = parseFloat(dataEl.getAttribute("data-y"));',
+    '    var requestId = dataEl.getAttribute("data-request-id");',
+    '    var info = getReactComponentAt(x, y);',
+    '    dataEl.setAttribute("data-result", info.name || "");',
+    '    dataEl.setAttribute("data-result-path", info.path || "");',
+    '    dataEl.setAttribute("data-result-path-guessed", info.pathGuessed ? "true" : "");',
+    '    dataEl.setAttribute("data-result-id", requestId);',
+    '    window.dispatchEvent(new Event("__RA_COMPONENT_RESULT__"));',
+    '  });',
+    '  console.log("[React Annotator] Page script injected");',
+    '})();'
+  ].join('\n');
+  (document.head || document.documentElement).appendChild(script);
+  script.remove();
+}
+
+injectPageScript();
+
+const pendingComponentRequests = new Map();
+
+window.addEventListener('__RA_COMPONENT_RESULT__', () => {
+  const dataEl = document.getElementById('__ra_data__');
+  if (!dataEl) return;
+  const requestId = dataEl.getAttribute('data-result-id');
+  const componentName = dataEl.getAttribute('data-result') || null;
+  const componentPath = dataEl.getAttribute('data-result-path') || null;
+  const pathGuessed = dataEl.getAttribute('data-result-path-guessed') === 'true';
+  const resolver = pendingComponentRequests.get(requestId);
+  if (resolver) {
+    resolver({ name: componentName, path: componentPath, pathGuessed });
+    pendingComponentRequests.delete(requestId);
+  }
+});
+
+function getReactComponentViaPageScript(x, y) {
+  return new Promise((resolve) => {
+    const requestId = 'req-' + Date.now() + '-' + Math.random();
+    pendingComponentRequests.set(requestId, resolve);
+    // Use data attributes on a hidden element to pass data (avoids Firefox security restrictions)
+    let dataEl = document.getElementById('__ra_data__');
+    if (!dataEl) {
+      dataEl = document.createElement('div');
+      dataEl.id = '__ra_data__';
+      dataEl.style.display = 'none';
+      document.body.appendChild(dataEl);
+    }
+    dataEl.setAttribute('data-x', String(x));
+    dataEl.setAttribute('data-y', String(y));
+    dataEl.setAttribute('data-request-id', requestId);
+    window.dispatchEvent(new Event('__RA_GET_COMPONENT__'));
+    setTimeout(() => {
+      if (pendingComponentRequests.has(requestId)) {
+        pendingComponentRequests.delete(requestId);
+        resolve(null);
+      }
+    }, 100);
+  });
+}
+
+// ============================================================================
 // State Management
 // ============================================================================
 
@@ -193,15 +392,6 @@ function shouldIgnoreElement(element) {
 // ============================================================================
 
 /**
- * Detect React component name for an element
- * Uses multiple methods in order of reliability
- * @param {Element} element - DOM element
- * @returns {string|null} Component name or null
- */
-function getReactComponentName(element) {
-  if (!element) return null;
-
-/**
  * Find React fiber key on an element
  * @param {Element} el - DOM element
  * @returns {string|null} The fiber key or null
@@ -255,12 +445,23 @@ function getReactComponentName(element) {
   let el = element;
   for (let i = 0; i < 10 && el; i++) {
     const fiberKey = findFiberKey(el);
+    console.log('[RA] El:', el.tagName, 'key:', fiberKey);
     if (fiberKey) {
       let fiber = el[fiberKey];
-      for (let j = 0; j < 20 && fiber; j++) {
+      for (let j = 0; j < 30 && fiber; j++) {
+        if (fiber.type) {
+          const t = fiber.type;
+          if (typeof t === 'function') {
+            console.log('[RA] Fiber['+j+'] fn:', t.displayName || '-', '/', t.name || '-');
+          } else if (typeof t === 'string') {
+            console.log('[RA] Fiber['+j+'] tag:', t);
+          } else if (typeof t === 'object') {
+            console.log('[RA] Fiber['+j+'] obj:', t.displayName || '-', t.render?.name || '-');
+          }
+        }
         const name = nameFromFiber(fiber);
         if (name) {
-          console.log('[React Annotator] Found component:', name);
+          console.log('[RA] Found:', name);
           return name;
         }
         fiber = fiber.return;
@@ -362,53 +563,83 @@ function unhighlightElement() {
  * @param {Element} element - Element being annotated
  * @param {Object|null} existingAnnotation - Existing annotation to edit
  */
-function createAnnotationPopup(element, existingAnnotation = null) {
+async function createAnnotationPopup(element, existingAnnotation = null) {
   // Remove existing popup if any
   removeAnnotationPopup();
 
   const rect = element.getBoundingClientRect();
-  const componentName = existingAnnotation?.reactComponent || getReactComponentName(element);
+  // Use page script to get component name and path (content scripts can't access React fiber directly)
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  let componentName = existingAnnotation?.reactComponent;
+  let componentPath = existingAnnotation?.filePath;
+  let pathGuessed = false;
+  if (!componentName) {
+    const info = await getReactComponentViaPageScript(centerX, centerY);
+    componentName = info?.name;
+    componentPath = componentPath || info?.path;
+    pathGuessed = info?.pathGuessed || false;
+    console.log('[React Annotator] Component:', componentName, 'Path:', componentPath, pathGuessed ? '(suggested)' : '');
+  }
 
   // Create popup container
   const popup = document.createElement('div');
   popup.className = 'react-annotator-popup';
+  popup.dataset.pathGuessed = pathGuessed ? 'true' : 'false';
   popup.style.cssText = `
     position: fixed;
     z-index: ${STYLES.popupZIndex};
-    background: #ffffff;
-    border: 1px solid #e0e0e0;
+    background: #1e1e2e;
+    border: 1px solid #444;
     border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     padding: 16px;
     width: 320px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
-    color: #333;
+    color: #e0e0e0;
   `;
 
-  // Position popup (prefer right of element, fallback to left or below)
-  let left = rect.right + 10;
+  // Position popup with proper viewport bounds
+  const popupWidth = 340;
+  const popupHeight = 420; // Approximate height including all fields
+  const margin = 10;
+
+  let left = rect.right + margin;
   let top = rect.top;
 
-  if (left + 340 > window.innerWidth) {
-    left = rect.left - 330;
-    if (left < 0) {
-      left = Math.max(10, rect.left);
-      top = rect.bottom + 10;
+  // Horizontal positioning
+  if (left + popupWidth > window.innerWidth) {
+    left = rect.left - popupWidth - margin;
+    if (left < margin) {
+      left = Math.max(margin, Math.min(rect.left, window.innerWidth - popupWidth - margin));
     }
   }
 
-  if (top + 300 > window.innerHeight) {
-    top = Math.max(10, window.innerHeight - 310);
+  // Vertical positioning - ensure popup fits in viewport
+  if (top + popupHeight > window.innerHeight) {
+    // Try positioning above the element
+    if (rect.top > popupHeight + margin) {
+      top = rect.top - popupHeight - margin;
+    } else {
+      // Center vertically if neither above nor below works
+      top = Math.max(margin, (window.innerHeight - popupHeight) / 2);
+    }
   }
+
+  // Final bounds check
+  top = Math.max(margin, Math.min(top, window.innerHeight - popupHeight - margin));
+  left = Math.max(margin, Math.min(left, window.innerWidth - popupWidth - margin));
 
   popup.style.left = `${left}px`;
   popup.style.top = `${top}px`;
+  popup.style.maxHeight = `${window.innerHeight - margin * 2}px`;
+  popup.style.overflowY = 'auto';
 
-  // Create popup content
+  // Create popup content (dark theme)
   popup.innerHTML = `
     <div style="margin-bottom: 12px;">
-      <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #555;">
+      <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #aaa;">
         React Component
       </label>
       <input
@@ -419,39 +650,47 @@ function createAnnotationPopup(element, existingAnnotation = null) {
         style="
           width: 100%;
           padding: 8px 10px;
-          border: 1px solid #ddd;
+          border: 1px solid #555;
           border-radius: 4px;
           font-size: 14px;
           box-sizing: border-box;
           outline: none;
+          background: #2a2a3e;
+          color: #e0e0e0;
         "
       >
-      ${componentName ? '<span style="font-size: 11px; color: #888; margin-top: 2px; display: block;">Auto-detected</span>' : ''}
+      ${componentName ? '<span style="font-size: 11px; color: #6a6; margin-top: 2px; display: block;">✓ Auto-detected</span>' : ''}
     </div>
 
     <div style="margin-bottom: 12px;">
-      <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #555;">
-        File Path (optional)
+      <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #aaa;">
+        File Path ${componentPath ? '' : '(optional)'}
       </label>
       <input
         type="text"
         id="ra-file-path"
-        value="${existingAnnotation?.filePath || ''}"
+        value="${componentPath || ''}"
         placeholder="e.g., src/components/Button.tsx"
         style="
           width: 100%;
           padding: 8px 10px;
-          border: 1px solid #ddd;
+          border: 1px solid #555;
           border-radius: 4px;
           font-size: 14px;
           box-sizing: border-box;
           outline: none;
+          background: #2a2a3e;
+          color: #e0e0e0;
         "
       >
+      ${componentPath ? (pathGuessed
+        ? '<span style="font-size: 11px; color: #a86; margin-top: 2px; display: block;">💡 Suggested - verify path</span>'
+        : '<span style="font-size: 11px; color: #6a6; margin-top: 2px; display: block;">✓ Auto-detected</span>')
+      : ''}
     </div>
 
     <div style="margin-bottom: 16px;">
-      <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #555;">
+      <label style="display: block; font-weight: 600; margin-bottom: 4px; color: #aaa;">
         Comment
       </label>
       <textarea
@@ -461,18 +700,34 @@ function createAnnotationPopup(element, existingAnnotation = null) {
           width: 100%;
           height: 80px;
           padding: 8px 10px;
-          border: 1px solid #ddd;
+          border: 1px solid #555;
           border-radius: 4px;
           font-size: 14px;
           box-sizing: border-box;
           resize: vertical;
           outline: none;
           font-family: inherit;
+          background: #2a2a3e;
+          color: #e0e0e0;
         "
       >${existingAnnotation?.comment || ''}</textarea>
     </div>
 
-    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+    <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;">
+      <button
+        id="ra-devtools-btn"
+        style="
+          padding: 8px 12px;
+          background: #2d4a2d;
+          color: #8f8;
+          border: 1px solid #4a4;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 13px;
+          margin-right: auto;
+        "
+        title="Select this element in React DevTools"
+      >⚛️ Inspect</button>
       ${existingAnnotation ? `
         <button
           id="ra-delete-btn"
@@ -484,7 +739,6 @@ function createAnnotationPopup(element, existingAnnotation = null) {
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
-            margin-right: auto;
           "
         >Delete</button>
       ` : ''}
@@ -492,9 +746,9 @@ function createAnnotationPopup(element, existingAnnotation = null) {
         id="ra-cancel-btn"
         style="
           padding: 8px 16px;
-          background: #f5f5f5;
-          color: #333;
-          border: 1px solid #ddd;
+          background: #3a3a4e;
+          color: #ccc;
+          border: 1px solid #555;
           border-radius: 4px;
           cursor: pointer;
           font-size: 14px;
@@ -537,6 +791,38 @@ function createAnnotationPopup(element, existingAnnotation = null) {
   if (deleteBtn) {
     deleteBtn.addEventListener('click', () => {
       deleteAnnotation(existingAnnotation.id);
+    });
+  }
+
+  // DevTools inspect button
+  const devToolsBtn = popup.querySelector('#ra-devtools-btn');
+  if (devToolsBtn) {
+    devToolsBtn.addEventListener('click', () => {
+      // Store element globally so DevTools can find it
+      window.__REACT_ANNOTATOR_SELECTED__ = element;
+      // Try to trigger React DevTools selection
+      const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+      if (hook && hook.renderers && hook.renderers.size > 0) {
+        try {
+          const renderer = Array.from(hook.renderers.values())[0];
+          if (renderer.findFiberByHostInstance) {
+            const fiber = renderer.findFiberByHostInstance(element);
+            if (fiber && hook.emit) {
+              hook.emit('inspectElement', { id: fiber.id, rendererID: 1 });
+            }
+          }
+        } catch (e) {
+          console.log('[React Annotator] DevTools inspection error:', e);
+        }
+      }
+      // Also use $r trick - select in Elements panel, then type $r in console
+      console.log('%c[React Annotator] Element stored as window.__REACT_ANNOTATOR_SELECTED__', 'color: #8f8');
+      console.log('%cTip: Select this element in Elements tab, then React DevTools will show its component', 'color: #aaa');
+      console.log(element);
+      // Flash the element to indicate it's been selected
+      const originalOutline = element.style.outline;
+      element.style.outline = '3px solid #4ade80';
+      setTimeout(() => { element.style.outline = originalOutline; }, 1000);
     });
   }
 
@@ -621,14 +907,17 @@ async function saveAnnotation(element, existingAnnotation) {
   // Capture screenshot
   const screenshot = await captureElementScreenshot(element);
 
+  const pathGuessed = popup.dataset.pathGuessed === 'true';
+
   const annotation = {
     id: existingAnnotation?.id || generateId(),
     selector: generateSelector(element),
     xpath: generateXPath(element),
     reactComponent: componentName || null,
     filePath: filePath || null,
+    pathGuessed: pathGuessed,
     comment: comment,
-    elementHTML: element.outerHTML.substring(0, 200),
+    elementHTML: element.outerHTML.substring(0, 500),
     screenshot: screenshot,
     timestamp: Date.now(),
     url: window.location.href,
@@ -709,10 +998,10 @@ function createCommentIcon(element, annotation) {
     icon.style.transform = 'scale(1)';
   });
 
-  icon.addEventListener('click', (e) => {
+  icon.addEventListener('click', async (e) => {
     e.stopPropagation();
     e.preventDefault();
-    createAnnotationPopup(element, annotation);
+    await createAnnotationPopup(element, annotation);
   });
 
   document.body.appendChild(icon);
@@ -834,7 +1123,7 @@ function handleMouseMove(event) {
  * Handle click events during selection mode
  * @param {MouseEvent} event
  */
-function handleClick(event) {
+async function handleClick(event) {
   if (!state.isSelectionMode) return;
   if (shouldIgnoreElement(event.target)) return;
 
@@ -854,7 +1143,7 @@ function handleClick(event) {
   }
 
   unhighlightElement();
-  createAnnotationPopup(element, existingAnnotation);
+  await createAnnotationPopup(element, existingAnnotation);
 }
 
 /**
@@ -960,6 +1249,20 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
       state.annotations.clear();
       saveAnnotationsToStorage();
       sendResponse({ success: true });
+      break;
+
+    case 'SCROLL_TO_ANNOTATION':
+      const targetElement = findElement(message.annotation);
+      if (targetElement) {
+        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Flash the element
+        const origOutline = targetElement.style.outline;
+        targetElement.style.outline = '3px solid #4ade80';
+        setTimeout(() => { targetElement.style.outline = origOutline; }, 2000);
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, error: 'Element not found' });
+      }
       break;
 
     case 'PING':

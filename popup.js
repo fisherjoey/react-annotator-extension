@@ -281,21 +281,36 @@ function formatAnnotationsForClaude(url, annotations) {
   let markdown = `## UI Annotations for ${url}\n\n`;
 
   annotations.forEach((annotation, index) => {
-    markdown += `### ${index + 1}. ${(annotation.reactComponent || annotation.componentName || 'Unknown Component')}\n`;
+    const componentName = annotation.reactComponent || annotation.componentName || 'Unknown Component';
+    markdown += `### ${index + 1}. ${componentName}\n`;
 
     if (annotation.filePath) {
-      markdown += `- **File:** ${annotation.filePath}\n`;
+      // Mark as suggested if pathGuessed flag is set or path looks auto-generated
+      const isSuggested = annotation.pathGuessed ||
+        (annotation.filePath.startsWith('components/') && annotation.filePath.endsWith('.tsx'));
+      if (isSuggested) {
+        markdown += `- **File (suggested):** \`${annotation.filePath}\` ⚠️ *search for "${componentName}" to verify*\n`;
+      } else {
+        markdown += `- **File:** \`${annotation.filePath}\`\n`;
+      }
     }
 
-    if (annotation.selector) {
-      markdown += `- **Selector:** \`${annotation.selector}\`\n`;
+    if (annotation.elementHTML) {
+      // Extract useful info from element HTML
+      const classMatch = annotation.elementHTML.match(/class="([^"]+)"/);
+      if (classMatch) {
+        markdown += `- **Classes:** \`${classMatch[1]}\`\n`;
+      }
     }
 
-    if (annotation.xpath) {
-      markdown += `- **XPath:** \`${annotation.xpath}\`\n`;
+    markdown += `- **Comment:** ${annotation.comment || 'No comment'}\n`;
+
+    // Add element HTML in a collapsible details block
+    if (annotation.elementHTML) {
+      markdown += `\n<details>\n<summary>Element HTML</summary>\n\n\`\`\`html\n${annotation.elementHTML}\n\`\`\`\n</details>\n`;
     }
 
-    markdown += `- **Comment:** ${annotation.comment || 'No comment'}\n\n`;
+    markdown += `\n`;
   });
 
   return markdown;
