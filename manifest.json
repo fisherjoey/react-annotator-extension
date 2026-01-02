@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "React Annotator for Claude",
   "description": "Annotate React components with comments and export for Claude Code",
-  "version": "1.0.0",
+  "version": "1.0.1",
 
   "permissions": [
     "activeTab",

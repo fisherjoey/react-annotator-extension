@@ -147,11 +147,15 @@ function createAnnotationItem(annotation, index) {
   item.className = 'annotation-item';
   item.setAttribute('data-index', index);
 
-  const componentName = annotation.componentName || 'Unknown component';
+  const componentName = annotation.reactComponent || annotation.componentName || 'Unknown component';
   const comment = annotation.comment || 'No comment';
   const truncatedComment = comment.length > 80 ? comment.substring(0, 80) + '...' : comment;
+  const thumbnailHtml = annotation.screenshot
+    ? '<img src="' + annotation.screenshot + '" class="annotation-thumbnail" alt="Screenshot">'
+    : '';
 
   item.innerHTML = `
+    ${thumbnailHtml}
     <div class="annotation-content">
       <div class="annotation-component">${escapeHtml(componentName)}</div>
       <div class="annotation-comment">${escapeHtml(truncatedComment)}</div>
@@ -273,7 +277,7 @@ function formatAnnotationsForClaude(url, annotations) {
   let markdown = `## UI Annotations for ${url}\n\n`;
 
   annotations.forEach((annotation, index) => {
-    markdown += `### ${index + 1}. ${annotation.componentName || 'Unknown Component'}\n`;
+    markdown += `### ${index + 1}. ${(annotation.reactComponent || annotation.componentName || 'Unknown Component')}\n`;
 
     if (annotation.filePath) {
       markdown += `- **File:** ${annotation.filePath}\n`;

@@ -1,185 +1,114 @@
 /**
  * React Annotator for Claude - Background Script
- *
- * Handles message passing between content scripts and the popup.
- * Manages annotation storage using browser.storage.local.
- *
- * Storage structure:
- * {
- *   "annotations": {
- *     "https://example.com/page1": [
- *       { id: "...", selector: "...", text: "...", timestamp: ... },
- *       ...
- *     ],
- *     "https://example.com/page2": [...],
- *     ...
- *   }
- * }
+ * Handles storage, messaging, and screenshot capture
  */
 
-// Listen for messages from content scripts and popup
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Handle different message types
+const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+
+// Listen for messages
+browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
-    case "saveAnnotation":
-      return handleSaveAnnotation(message.data);
+    case 'GET_ANNOTATIONS':
+      handleGetAnnotations(message.url).then(sendResponse);
+      return true;
 
-    case "getAnnotations":
-      return handleGetAnnotations(message.url);
+    case 'DELETE_ANNOTATION':
+      handleDeleteAnnotation(message.url, message.id).then(sendResponse);
+      return true;
 
-    case "deleteAnnotation":
-      return handleDeleteAnnotation(message.url, message.annotationId);
+    case 'GET_ALL_ANNOTATIONS':
+      handleGetAllAnnotations().then(sendResponse);
+      return true;
 
-    case "exportAll":
-      return handleExportAll();
+    case 'SAVE_ANNOTATIONS':
+      handleSaveAnnotations(message.url, message.annotations).then(sendResponse);
+      return true;
+
+    case 'LOAD_ANNOTATIONS':
+      handleGetAnnotations(message.url).then(sendResponse);
+      return true;
+
+    case 'CAPTURE_SCREENSHOT':
+      handleCaptureScreenshot(sender.tab.id).then(sendResponse);
+      return true;
 
     default:
-      console.warn(`Unknown message type: ${message.type}`);
-      return Promise.resolve({ success: false, error: "Unknown message type" });
+      console.warn('[React Annotator] Unknown message:', message.type);
+      return false;
   }
 });
 
 /**
- * Save an annotation for a specific URL
- * @param {Object} data - Annotation data including url, id, selector, text, timestamp
- * @returns {Promise} Resolves with success status
+ * Capture visible tab screenshot
  */
-async function handleSaveAnnotation(data) {
+async function handleCaptureScreenshot(tabId) {
   try {
-    const { url, annotation } = data;
-
-    // Get current annotations from storage
-    const storage = await browser.storage.local.get("annotations");
-    const annotations = storage.annotations || {};
-
-    // Initialize array for this URL if it doesn't exist
-    if (!annotations[url]) {
-      annotations[url] = [];
-    }
-
-    // Check if annotation with this ID already exists (update case)
-    const existingIndex = annotations[url].findIndex(
-      (a) => a.id === annotation.id
-    );
-
-    if (existingIndex >= 0) {
-      // Update existing annotation
-      annotations[url][existingIndex] = {
-        ...annotations[url][existingIndex],
-        ...annotation,
-        updatedAt: Date.now(),
-      };
-    } else {
-      // Add new annotation with timestamp
-      annotations[url].push({
-        ...annotation,
-        createdAt: Date.now(),
-      });
-    }
-
-    // Save back to storage
-    await browser.storage.local.set({ annotations });
-
-    return { success: true, annotation };
+    const dataUrl = await browserAPI.tabs.captureVisibleTab(null, {
+      format: 'png'
+    });
+    return { success: true, screenshot: dataUrl };
   } catch (error) {
-    console.error("Error saving annotation:", error);
+    console.error('[React Annotator] Screenshot error:', error);
     return { success: false, error: error.message };
   }
 }
 
 /**
- * Get all annotations for a specific URL
- * @param {string} url - The URL to get annotations for
- * @returns {Promise} Resolves with annotations array
+ * Save annotations for a URL
+ */
+async function handleSaveAnnotations(url, annotations) {
+  try {
+    const storage = await browserAPI.storage.local.get('annotations');
+    const all = storage.annotations || {};
+    all[url] = annotations;
+    if (!annotations || annotations.length === 0) delete all[url];
+    await browserAPI.storage.local.set({ annotations: all });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get annotations for a URL
  */
 async function handleGetAnnotations(url) {
   try {
-    const storage = await browser.storage.local.get("annotations");
-    const annotations = storage.annotations || {};
-
-    // Return annotations for this URL, or empty array if none exist
-    return {
-      success: true,
-      annotations: annotations[url] || [],
-    };
+    const storage = await browserAPI.storage.local.get('annotations');
+    const all = storage.annotations || {};
+    return { success: true, annotations: all[url] || [] };
   } catch (error) {
-    console.error("Error getting annotations:", error);
     return { success: false, error: error.message, annotations: [] };
   }
 }
 
 /**
- * Delete a specific annotation by ID from a URL
- * @param {string} url - The URL the annotation belongs to
- * @param {string} annotationId - The ID of the annotation to delete
- * @returns {Promise} Resolves with success status
+ * Get all annotations
  */
-async function handleDeleteAnnotation(url, annotationId) {
+async function handleGetAllAnnotations() {
   try {
-    const storage = await browser.storage.local.get("annotations");
-    const annotations = storage.annotations || {};
-
-    // Check if URL has annotations
-    if (!annotations[url]) {
-      return { success: false, error: "No annotations found for this URL" };
-    }
-
-    // Filter out the annotation to delete
-    const originalLength = annotations[url].length;
-    annotations[url] = annotations[url].filter((a) => a.id !== annotationId);
-
-    // Check if annotation was actually deleted
-    if (annotations[url].length === originalLength) {
-      return { success: false, error: "Annotation not found" };
-    }
-
-    // Clean up empty URL entries
-    if (annotations[url].length === 0) {
-      delete annotations[url];
-    }
-
-    // Save back to storage
-    await browser.storage.local.set({ annotations });
-
-    return { success: true };
+    const storage = await browserAPI.storage.local.get('annotations');
+    return { success: true, annotations: storage.annotations || {} };
   } catch (error) {
-    console.error("Error deleting annotation:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, annotations: {} };
   }
 }
 
 /**
- * Export all annotations across all URLs
- * @returns {Promise} Resolves with all annotations organized by URL
+ * Delete an annotation
  */
-async function handleExportAll() {
+async function handleDeleteAnnotation(url, annotationId) {
   try {
-    const storage = await browser.storage.local.get("annotations");
-    const annotations = storage.annotations || {};
-
-    // Calculate summary statistics
-    const urlCount = Object.keys(annotations).length;
-    const totalAnnotations = Object.values(annotations).reduce(
-      (sum, arr) => sum + arr.length,
-      0
-    );
-
-    return {
-      success: true,
-      data: {
-        exportedAt: new Date().toISOString(),
-        summary: {
-          urlCount,
-          totalAnnotations,
-        },
-        annotations,
-      },
-    };
+    const storage = await browserAPI.storage.local.get('annotations');
+    const all = storage.annotations || {};
+    if (!all[url]) return { success: false, error: 'No annotations for URL' };
+    all[url] = all[url].filter(a => a.id !== annotationId);
+    if (all[url].length === 0) delete all[url];
+    await browserAPI.storage.local.set({ annotations: all });
+    return { success: true };
   } catch (error) {
-    console.error("Error exporting annotations:", error);
     return { success: false, error: error.message };
   }
 }
 
-// Log when background script is loaded
-console.log("React Annotator for Claude - Background script loaded");
+console.log('[React Annotator] Background script loaded');

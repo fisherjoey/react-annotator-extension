@@ -570,11 +570,35 @@ function removeAnnotationPopup() {
 }
 
 /**
- * Save annotation from popup inputs
- * @param {Element} element - Element being annotated
- * @param {Object|null} existingAnnotation - Existing annotation to update
+ * Capture and crop screenshot of an element
  */
-function saveAnnotation(element, existingAnnotation) {
+async function captureElementScreenshot(element) {
+  try {
+    const rect = element.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const response = await chrome.runtime.sendMessage({ type: 'CAPTURE_SCREENSHOT' });
+    if (!response?.success) return null;
+
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = response.screenshot; });
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.drawImage(img, rect.left * dpr, rect.top * dpr, rect.width * dpr, rect.height * dpr, 0, 0, canvas.width, canvas.height);
+
+    return canvas.toDataURL('image/jpeg', 0.8);
+  } catch (e) {
+    console.error('[React Annotator] Screenshot error:', e);
+    return null;
+  }
+}
+
+/**
+ * Save annotation from popup inputs
+ */
+async function saveAnnotation(element, existingAnnotation) {
   const popup = state.popupElement;
   if (!popup) return;
 
@@ -587,6 +611,13 @@ function saveAnnotation(element, existingAnnotation) {
     return;
   }
 
+  // Show saving state
+  const saveBtn = popup.querySelector('#ra-save-btn');
+  if (saveBtn) { saveBtn.textContent = 'Capturing...'; saveBtn.disabled = true; }
+
+  // Capture screenshot
+  const screenshot = await captureElementScreenshot(element);
+
   const annotation = {
     id: existingAnnotation?.id || generateId(),
     selector: generateSelector(element),
@@ -595,21 +626,17 @@ function saveAnnotation(element, existingAnnotation) {
     filePath: filePath || null,
     comment: comment,
     elementHTML: element.outerHTML.substring(0, 200),
+    screenshot: screenshot,
     timestamp: Date.now(),
     url: window.location.href,
   };
 
   state.annotations.set(annotation.id, annotation);
-
-  // Update or create comment icon
   createCommentIcon(element, annotation);
-
-  // Save to storage via background script
   saveAnnotationsToStorage();
-
   removeAnnotationPopup();
 
-  console.log('[React Annotator] Annotation saved:', annotation);
+  console.log('[React Annotator] Saved with screenshot:', annotation.id);
 }
 
 /**
@@ -832,8 +859,8 @@ function handleClick(event) {
  * @param {KeyboardEvent} event
  */
 function handleKeyDown(event) {
-  // Ctrl+Shift+A to toggle selection mode
-  if (event.ctrlKey && event.shiftKey && event.key === 'A') {
+  // Alt+Shift+R to toggle selection mode
+  if (event.altKey && event.shiftKey && event.key === 'R') {
     event.preventDefault();
     toggleSelectionMode();
   }
